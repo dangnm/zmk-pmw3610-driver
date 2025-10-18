@@ -167,6 +167,15 @@ config PMW3610_MOVEMENT_THRESHOLD
         A higher value means more movement is required to activate the mouse layer.
         This helps prevent accidental activation during typing.
 
+config PMW3610_AUTOMOUSE_ACTIVATION_DELAY_MS
+    int "Required duration of movement before activating mouse layer (ms)"
+    default 2000
+    help
+        The amount of time (in milliseconds) that movement must be sustained
+        before the automatic mouse layer is activated. Set to 0 to activate
+        immediately when movement is detected. A value like 2000 (2 seconds)
+        requires sustained movement before layer switching occurs.
+
 config PMW3610_BALL_ACTION_TICK
     int "PMW3610's required ticks to trigger a ball action"
     default 20

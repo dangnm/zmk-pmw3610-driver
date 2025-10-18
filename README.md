@@ -112,4 +112,25 @@ CONFIG_SPI=y
 CONFIG_INPUT=y
 CONFIG_ZMK_MOUSE=y
 CONFIG_PMW3610=y
+
+# Optional: Require sustained movement before activating auto mouse layer
+# This prevents accidental activation with brief movements
+# CONFIG_PMW3610_AUTOMOUSE_ACTIVATION_DELAY_MS=2000
 ```
+
+## Configuration Options
+
+### Auto Mouse Layer Activation
+
+The driver supports automatic mouse layer activation when trackball movement is detected. You can configure two conditions:
+
+1. **Movement Threshold** (`CONFIG_PMW3610_MOVEMENT_THRESHOLD`): The minimum movement magnitude required to trigger activation (default: 5)
+2. **Activation Delay** (`CONFIG_PMW3610_AUTOMOUSE_ACTIVATION_DELAY_MS`): The duration (in milliseconds) that movement must be sustained before the layer activates (default: 0 = immediate)
+
+To require sustained movement for 2 seconds before layer activation:
+
+```conf
+CONFIG_PMW3610_AUTOMOUSE_ACTIVATION_DELAY_MS=2000
+```
+
+This helps prevent accidental layer switching from brief or unintentional movements.

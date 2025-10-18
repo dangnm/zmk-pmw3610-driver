@@ -643,15 +643,6 @@ static int pmw3610_report_data(const struct device *dev) {
     int16_t x = 0;
     int16_t y = 0;
 
-#if AUTOMOUSE_LAYER > 0
-    if (input_mode == MOVE &&
-        (automouse_triggered || zmk_keymap_highest_layer_active() != AUTOMOUSE_LAYER) &&
-        (abs(x) + abs(y) > CONFIG_PMW3610_MOVEMENT_THRESHOLD)
-    ) {
-        activate_automouse_layer();
-    }
-#endif
-
     int err = motion_burst_read(dev, buf, sizeof(buf));
     if (err) {
         return err;
@@ -719,12 +710,39 @@ static int pmw3610_report_data(const struct device *dev) {
     if (x != 0 || y != 0) {
         if (input_mode == MOVE || input_mode == SNIPE) {
 #if AUTOMOUSE_LAYER > 0
-            // トラックボールの動きの大きさを計算
+            // Calculate trackball movement magnitude
             int16_t movement_size = abs(x) + abs(y);
             if (input_mode == MOVE &&
                 (automouse_triggered || zmk_keymap_highest_layer_active() != AUTOMOUSE_LAYER) &&
                 movement_size > CONFIG_PMW3610_MOVEMENT_THRESHOLD) {
+                
+#if CONFIG_PMW3610_AUTOMOUSE_ACTIVATION_DELAY_MS > 0
+                // Sustained movement check: track movement duration
+                int64_t current_time = k_uptime_get();
+                
+                if (!data->automouse_movement_ongoing) {
+                    // Movement just started, record the start time
+                    data->automouse_movement_start_time = current_time;
+                    data->automouse_movement_ongoing = true;
+                } else {
+                    // Check if movement has been sustained long enough
+                    int64_t movement_duration = current_time - data->automouse_movement_start_time;
+                    if (movement_duration >= CONFIG_PMW3610_AUTOMOUSE_ACTIVATION_DELAY_MS) {
+                        activate_automouse_layer();
+                    }
+                }
+#else
+                // No delay configured, activate immediately
                 activate_automouse_layer();
+#endif
+            } else {
+#if CONFIG_PMW3610_AUTOMOUSE_ACTIVATION_DELAY_MS > 0
+                // Movement below threshold, reset tracking
+                if (data->automouse_movement_ongoing) {
+                    data->automouse_movement_ongoing = false;
+                    data->automouse_movement_start_time = 0;
+                }
+#endif
             }
 #endif
             input_report_rel(dev, INPUT_REL_X, x, false, K_FOREVER);
@@ -782,6 +800,14 @@ static int pmw3610_report_data(const struct device *dev) {
                 }
             }
         }
+    } else {
+#if AUTOMOUSE_LAYER > 0 && CONFIG_PMW3610_AUTOMOUSE_ACTIVATION_DELAY_MS > 0
+        // No movement detected, reset movement tracking
+        if (data->automouse_movement_ongoing) {
+            data->automouse_movement_ongoing = false;
+            data->automouse_movement_start_time = 0;
+        }
+#endif
     }
 
     return err;
@@ -851,6 +877,12 @@ static int pmw3610_init(const struct device *dev) {
 
     // init smart algorithm flag;
     data->sw_smart_flag = false;
+
+    // init automouse movement tracking
+#if AUTOMOUSE_LAYER > 0 && CONFIG_PMW3610_AUTOMOUSE_ACTIVATION_DELAY_MS > 0
+    data->automouse_movement_ongoing = false;
+    data->automouse_movement_start_time = 0;
+#endif
 
     // init trigger handler work
     k_work_init(&data->trigger_work, pmw3610_work_callback);

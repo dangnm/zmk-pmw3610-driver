@@ -50,6 +50,10 @@ struct pixart_data {
 
     // for pmw3610 smart algorithm
     bool sw_smart_flag;
+
+    // for automouse layer activation tracking
+    int64_t automouse_movement_start_time;
+    bool automouse_movement_ongoing;
 };
 
 // ball action config data structure
