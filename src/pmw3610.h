@@ -135,6 +135,24 @@ extern "C" {
 #define PMW3610_SCROLL_Y_POSITIVE 1
 #endif
 
+/* Runtime configuration API */
+#if DT_INST_NODE_HAS_PROP(0, automouse_layer) && DT_INST_PROP(0, automouse_layer) > 0
+/**
+ * Get the current automouse timeout value in milliseconds
+ * @param dev PMW3610 device
+ * @return Current timeout value in milliseconds
+ */
+uint32_t pmw3610_get_automouse_timeout_ms(const struct device *dev);
+
+/**
+ * Set the automouse timeout value in milliseconds
+ * @param dev PMW3610 device
+ * @param timeout_ms New timeout value in milliseconds (must be > 0)
+ * @return 0 on success, -EINVAL if timeout_ms is 0
+ */
+int pmw3610_set_automouse_timeout_ms(const struct device *dev, uint32_t timeout_ms);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
