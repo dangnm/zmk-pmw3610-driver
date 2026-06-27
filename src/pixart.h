@@ -59,6 +59,13 @@ struct pixart_data {
     // for pmw3610 smart algorithm
     bool sw_smart_flag;
 
+    // for automouse layer tracking
+#if DT_INST_NODE_HAS_PROP(0, automouse_layer) && DT_INST_PROP(0, automouse_layer) > 0
+    bool automouse_movement_ongoing;
+    int64_t automouse_movement_start_time;
+    uint32_t automouse_timeout_ms;  // runtime configurable timeout
+#endif
+
     // for scroll acceleration
     int64_t last_remainder_time;
 };

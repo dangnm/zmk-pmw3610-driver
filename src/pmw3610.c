@@ -15,6 +15,7 @@
 #include <zephyr/input/input.h>
 #include <zephyr/device.h>
 #include <zephyr/sys/dlist.h>
+#include <zephyr/settings/settings.h>
 #include <zephyr/pm/device.h>
 #include <drivers/behavior.h>
 #include <math.h>
@@ -558,10 +559,11 @@ static void pmw3610_async_init(struct k_work *work) {
 struct k_timer automouse_layer_timer;
 static bool automouse_triggered = false;
 
-static void activate_automouse_layer() {
+static void activate_automouse_layer(const struct device *dev) {
+    struct pixart_data *data = dev->data;
     automouse_triggered = true;
     zmk_keymap_layer_activate(AUTOMOUSE_LAYER);
-    k_timer_start(&automouse_layer_timer, K_MSEC(CONFIG_PMW3610_AUTOMOUSE_TIMEOUT_MS), K_NO_WAIT);
+    k_timer_start(&automouse_layer_timer, K_MSEC(data->automouse_timeout_ms), K_NO_WAIT);
 }
 
 static void deactivate_automouse_layer(struct k_timer *timer) {
@@ -570,6 +572,46 @@ static void deactivate_automouse_layer(struct k_timer *timer) {
 }
 
 K_TIMER_DEFINE(automouse_layer_timer, deactivate_automouse_layer, NULL);
+
+// Settings key for persistent storage
+#define SETTINGS_PMW3610_AUTOMOUSE_KEY "pmw3610/automouse_timeout"
+
+// Global reference to device for settings callbacks
+static const struct device *pmw3610_dev = NULL;
+
+// Settings load callback
+static int pmw3610_settings_set(const char *name, size_t len, settings_read_cb read_cb,
+                                void *cb_arg) {
+    const char *next;
+    
+    if (settings_name_steq(name, "automouse_timeout", &next) && !next) {
+        if (len != sizeof(uint32_t)) {
+            return -EINVAL;
+        }
+        
+        uint32_t timeout_ms;
+        if (read_cb(cb_arg, &timeout_ms, sizeof(timeout_ms)) == sizeof(timeout_ms)) {
+            if (pmw3610_dev && timeout_ms > 0) {
+                struct pixart_data *data = pmw3610_dev->data;
+                data->automouse_timeout_ms = timeout_ms;
+                LOG_INF("Loaded automouse timeout from settings: %u ms", timeout_ms);
+            }
+        }
+        return 0;
+    }
+    
+    return -ENOENT;
+}
+
+static struct settings_handler pmw3610_settings = {
+    .name = "pmw3610",
+    .h_set = pmw3610_settings_set,
+};
+
+// Helper function to save timeout to flash
+static int pmw3610_save_timeout_to_flash(uint32_t timeout_ms) {
+    return settings_save_one(SETTINGS_PMW3610_AUTOMOUSE_KEY, &timeout_ms, sizeof(timeout_ms));
+}
 #endif
 
 int ball_action_idx = -1;
@@ -766,7 +808,7 @@ static int pmw3610_report_data(const struct device *dev) {
     if (input_mode == MOVE &&
         (automouse_triggered || zmk_keymap_highest_layer_active() != AUTOMOUSE_LAYER) &&
         (abs(x) + abs(y) > CONFIG_PMW3610_MOVEMENT_THRESHOLD)) {
-        activate_automouse_layer();
+        activate_automouse_layer(dev);
     }
 #endif
 
@@ -855,7 +897,7 @@ static int pmw3610_report_data(const struct device *dev) {
             if (input_mode == MOVE &&
                 (automouse_triggered || zmk_keymap_highest_layer_active() != AUTOMOUSE_LAYER) &&
                 movement_size > CONFIG_PMW3610_MOVEMENT_THRESHOLD) {
-                activate_automouse_layer();
+                activate_automouse_layer(dev);
             }
 #endif
             input_report_rel(dev, INPUT_REL_X, accel_x, false, K_FOREVER);
@@ -933,6 +975,52 @@ static void pmw3610_work_callback(struct k_work *work) {
     set_interrupt(dev, true);
 }
 
+#if AUTOMOUSE_LAYER > 0
+/**
+ * Get the current automouse timeout value in milliseconds
+ * @param dev PMW3610 device
+ * @return Current timeout value in milliseconds
+ */
+uint32_t pmw3610_get_automouse_timeout_ms(const struct device *dev) {
+    struct pixart_data *data = dev->data;
+    return data->automouse_timeout_ms;
+}
+
+/**
+ * Set the automouse timeout value in milliseconds
+ * @param dev PMW3610 device
+ * @param timeout_ms New timeout value in milliseconds
+ * @return 0 on success
+ */
+int pmw3610_set_automouse_timeout_ms(const struct device *dev, uint32_t timeout_ms) {
+    struct pixart_data *data = dev->data;
+    if (timeout_ms == 0) {
+        LOG_WRN("Automouse timeout cannot be 0, keeping current value");
+        return -EINVAL;
+    }
+    
+    // Check if value actually changed before saving to flash
+    if (data->automouse_timeout_ms == timeout_ms) {
+        LOG_DBG("Automouse timeout already set to %u ms, skipping flash write", timeout_ms);
+        return 0;
+    }
+    
+    data->automouse_timeout_ms = timeout_ms;
+    LOG_INF("Automouse timeout changed to %u ms", timeout_ms);
+    
+    // Save to flash for persistence (only when value changed)
+    int err = pmw3610_save_timeout_to_flash(timeout_ms);
+    if (err) {
+        LOG_WRN("Failed to save automouse timeout to flash: %d", err);
+        // Don't fail the operation, the value is still set in RAM
+    } else {
+        LOG_DBG("Automouse timeout saved to flash");
+    }
+    
+    return 0;
+}
+#endif
+
 static int pmw3610_init_irq(const struct device *dev) {
     LOG_INF("Configure irq...");
 
@@ -978,6 +1066,31 @@ static int pmw3610_init(const struct device *dev) {
 
     // init smart algorithm flag;
     data->sw_smart_flag = false;
+
+    // init automouse timeout (runtime configurable)
+#if AUTOMOUSE_LAYER > 0
+    data->automouse_timeout_ms = CONFIG_PMW3610_AUTOMOUSE_TIMEOUT_MS;
+    
+    // Store device reference for settings callbacks
+    pmw3610_dev = dev;
+    
+    // Register settings handler
+    err = settings_subsys_init();
+    if (err) {
+        LOG_ERR("Settings subsys init failed (err %d)", err);
+    }
+    
+    err = settings_register(&pmw3610_settings);
+    if (err) {
+        LOG_ERR("Cannot register settings handler (err %d)", err);
+    }
+    
+    // Load settings from flash (this will call pmw3610_settings_set if data exists)
+    err = settings_load_subtree("pmw3610");
+    if (err) {
+        LOG_WRN("Cannot load settings (err %d), using default timeout", err);
+    }
+#endif
 
     // init trigger handler work
     k_work_init(&data->trigger_work, pmw3610_work_callback);

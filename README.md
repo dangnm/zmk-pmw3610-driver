@@ -132,3 +132,35 @@ CONFIG_PMW3610_PM=y
 CONFIG_PMW3610_ACCELERATION_ALGORITHM=2 # 0: disabled, 1: quadratic, 2: sigmoid
 CONFIG_PMW3610_ACCELERATION_SENSITIVITY=10 # 1-100
 ```
+
+## Runtime Configuration
+
+### Automouse Timeout
+
+The automouse layer timeout can now be configured at runtime using the provided API functions. This allows you to dynamically adjust how long the mouse layer stays active after trackball movement.
+
+**API Functions:**
+
+```c
+#include "pmw3610.h"
+
+// Get the current timeout value
+uint32_t timeout = pmw3610_get_automouse_timeout_ms(device);
+
+// Set a new timeout value (in milliseconds, must be > 0)
+int result = pmw3610_set_automouse_timeout_ms(device, 1000);  // 1 second
+```
+
+**Example Usage in Custom Behavior:**
+
+You can create a custom ZMK behavior to adjust the timeout on the fly. The default timeout is set via `CONFIG_PMW3610_AUTOMOUSE_TIMEOUT_MS` in your config, but can be changed at runtime.
+
+**Get Device Reference:**
+
+To use these functions, you need to get a reference to the PMW3610 device. In most cases, you can use:
+
+```c
+const struct device *pmw_dev = DEVICE_DT_GET(DT_NODELABEL(trackball));
+```
+
+Where `trackball` matches the label in your device tree overlay.
