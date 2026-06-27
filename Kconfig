@@ -76,6 +76,16 @@ config PMW3610_FORCE_AWAKE
     help
       This setting forces the sensor to always be in the RUN state.
 
+config PMW3610_PM
+    bool "Enable power management support for PMW3610"
+    depends on PM_DEVICE
+    default y if PM_DEVICE
+    help
+      Enable power management support for the PMW3610 sensor.
+      When enabled, the sensor will enter deep sleep (shutdown mode)
+      when the system suspends and wake up on resume.
+      This integrates with ZMK's low-power states for optimal battery life.
+
 config PMW3610_RUN_DOWNSHIFT_TIME_MS
     int "PMW3610's default RUN mode downshift time"
     default 128
@@ -173,6 +183,40 @@ config PMW3610_BALL_ACTION_TICK
     default 20
     help
         Ball action tick value. Higher values require more movement to trigger a ball action.
+
+config PMW3610_SCROLL_ACCELERATION
+    bool "Enable scroll acceleration"
+    default n
+    help
+      Enable acceleration for scrolling based on movement speed.
+
+config PMW3610_SCROLL_ACCELERATION_SENSITIVITY
+    int "Scroll acceleration sensitivity (1-10)"
+    default 3
+    range 1 10
+    depends on PMW3610_SCROLL_ACCELERATION
+    help
+      Scrolling acceleration sensitivity. Higher values make scrolling more responsive with stronger acceleration.
+
+config PMW3610_ACCELERATION_ALGORITHM
+    int "Acceleration algorithm (0=none, 1=quadratic, 2=sigmoid)"
+    default 0
+    range 0 2
+    help
+      Select the mouse acceleration algorithm:
+      0 = Disabled (no acceleration)
+      1 = Quadratic (QMK-style) - distance-based, formula: output = x * (1 + |x|/divider)
+          Simple and predictable - larger movements get proportionally more acceleration.
+      2 = Sigmoid (speed-based) - uses movement speed over time with S-curve.
+          Smoother transition between slow and fast movements.
+
+config PMW3610_ACCELERATION_SENSITIVITY
+    int "Acceleration sensitivity (1-100)"
+    default 3
+    range 1 100
+    depends on PMW3610_ACCELERATION_ALGORITHM > 0
+    help
+      Acceleration sensitivity. Higher values make mouse movement more responsive with stronger acceleration.
 
 module = PMW3610
 module-str = PMW3610

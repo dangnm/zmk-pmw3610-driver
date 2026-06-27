@@ -34,6 +34,14 @@ struct pixart_data {
     int16_t last_y;
 #endif
 
+#ifdef CONFIG_PMW3610_SCROLL_ACCELERATION
+    int64_t last_scroll_time;
+#endif
+
+#if CONFIG_PMW3610_ACCELERATION_ALGORITHM == 2
+    int64_t last_mouse_time;
+#endif
+
     // motion interrupt isr
     struct gpio_callback irq_gpio_cb;
     // the work structure holding the trigger job
@@ -57,6 +65,9 @@ struct pixart_data {
     int64_t automouse_movement_start_time;
     uint32_t automouse_timeout_ms;  // runtime configurable timeout
 #endif
+
+    // for scroll acceleration
+    int64_t last_remainder_time;
 };
 
 // ball action config data structure
